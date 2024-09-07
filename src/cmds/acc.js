@@ -1,12 +1,11 @@
-const axios = require('axios');
-const moment = require('moment-timezone');
+const moment = require("moment-timezone");
 
 module.exports = {
   config: {
     name: "acc",
-    description: "Handles friend requests. Approve or list friend requests.",
-    usage: "acc approve <UID> | acc",
-    cooldown: 0,
+    description: "Accept friend request on bot.",
+    usage: "acc approve <UID>",
+    cooldown: 5,
     role: 1,
     prefix: false
   },
@@ -30,11 +29,11 @@ module.exports = {
       const success = [];
       const failed = [];
       try {
-        const friendRequest = await axios.post(
+        const friendRequest = await api.httpPost(
           "https://www.facebook.com/api/graphql/",
           form
         );
-        if (friendRequest.data.errors) failed.push(targetUID);
+        if (JSON.parse(friendRequest).errors) failed.push(targetUID);
         else success.push(targetUID);
       } catch (e) {
         failed.push(targetUID);
@@ -46,19 +45,15 @@ module.exports = {
       if (args.length !== 2 || isNaN(args[1])) {
         return reply("Invalid syntax. Use: acc approve <UID>", event);
       }
+
       const targetUID = args[1];
-      try {
-        react("🟢", event);
-        const { success, failed } = await handleApprove(targetUID);
-        if (success.length > 0) {
-          reply(`Approved friend request for UID ${success.join(", ")}`, event);
-        }
-        if (failed.length > 0) {
-          reply(`Failed to approve friend request for UID ${failed.join(", ")}`, event);
-        }
-      } catch (error) {
-        react("❌", event);
-        reply(`❗ An error occurred: ${error.message}`, event);
+      const { success, failed } = await handleApprove(targetUID);
+      
+      if (success.length > 0) {
+        reply(`Approved friend request for UID ${success.join(", ")}`, event);
+      }
+      if (failed.length > 0) {
+        reply(`Failed to approve friend request for UID ${failed.join(", ")}`, event);
       }
       return;
     }
@@ -71,24 +66,22 @@ module.exports = {
       variables: JSON.stringify({ input: { scale: 3 } }),
     };
 
-    try {
-      react("🟢", event);
-      const listRequest = (await axios.post("https://www.facebook.com/api/graphql/", form)).data.data.viewer.friending_possibilities.edges;
-      let msg = "";
-      let i = 0;
-      for (const user of listRequest) {
-        i++;
-        msg +=
-          `\n${i}. Name: ${user.node.name}` +
-          `\nID: ${user.node.id}` +
-          `\nUrl: ${user.node.url.replace("www.facebook", "fb")}` +
-          `\nTime: ${moment(user.time * 1000).tz("Asia/Manila").format("DD/MM/YYYY HH:mm:ss")}\n`;
-      }
-      react("✅", event);
-      reply(`${msg}\nApprove friend request using UID: acc approve <UID>`, event);
-    } catch (error) {
-      react("❌", event);
-      reply(`❗ An error occurred: ${error.message}`, event);
+    const listRequest = JSON.parse(
+      await api.httpPost("https://www.facebook.com/api/graphql/", form)
+    ).data.viewer.friending_possibilities.edges;
+
+    let msg = "";
+    let i = 0;
+    for (const user of listRequest) {
+      i++;
+      msg += `\n${i}. Name: ${user.node.name}` +
+        `\nID: ${user.node.id}` +
+        `\nUrl: ${user.node.url.replace("www.facebook", "fb")}` +
+        `\nTime: ${moment(user.time * 1000)
+          .tz("Asia/Manila")
+          .format("DD/MM/YYYY HH:mm:ss")}\n`;
     }
+
+    reply(`${msg}\nApprove friend request using UID: acc approve <UID>`, event);
   }
 };
