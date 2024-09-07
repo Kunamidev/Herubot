@@ -1,47 +1,52 @@
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+const axios = require("axios");
+const request = require("request");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   config: {
     name: "tikdl",
-    description: "Download TikTok content from a provided URL.",
-    usage: "tikdl <url>",
-    cooldown: 5,
+    description: "TikTok video downloader",
+    usage: "[tiktokvideolink]",
+    cooldown: 1,
     role: 0,
     prefix: false
   },
   run: async (api, event, args, reply, react) => {
     try {
-      if (!args.length) {
-        return reply("Please provide a TikTok URL. Usage: tikdl <url>", event);
+      if (!args[0]) {
+        return reply(`[!] Need a TikTok video link to proceed.\nUse: tikdl [tiktok video link]`, event);
       }
 
-      const url = args[0];
-      const apiUrl = `https://deku-rest-api.gleeze.com/tiktokdl?url=${encodeURIComponent(url)}`;
+      const link = args[0];
+      const senderName = event.senderID;
 
       react("⏳", event);
+      api.sendMessage(`🕟 | Hey, your video is downloading. Please wait...`, event.threadID, event.messageID);
 
-      const response = await axios.get(apiUrl, { responseType: 'arraybuffer' });
+      const res = await axios.get(`https://deku-rest-api.gleeze.com/tiktokdl?url=${link}`);
 
-      const filePath = path.join(__dirname, 'cache', 'tiktok_video.mp4');
-      
-      if (!fs.existsSync(path.join(__dirname, 'cache'))) {
-        fs.mkdirSync(path.join(__dirname, 'cache'));
+      if (!res.data || !res.data.download_url) {
+        throw new Error("Failed to fetch download link. Please check the provided URL.");
       }
 
-      fs.writeFileSync(filePath, response.data);
+      const downloadUrl = res.data.download_url;
 
-      const attachment = {
-        body: "🎥 TikTok content downloaded successfully!",
-        attachment: fs.createReadStream(filePath)
+      const callback = () => {
+        api.sendMessage({
+          body: `✨ Here's your TikTok video!`,
+          attachment: fs.createReadStream(path.join(__dirname, 'cache', 'tikdl.mp4'))
+        }, event.threadID, () => fs.unlinkSync(path.join(__dirname, 'cache', 'tikdl.mp4')));
       };
 
-      reply(attachment, event);
+      request(downloadUrl)
+        .pipe(fs.createWriteStream(path.join(__dirname, 'cache', 'tikdl.mp4')))
+        .on("close", callback);
+
       react("✅", event);
     } catch (error) {
-      react("⚠️", event);
-      reply(`An error occurred: ${error.message}`, event);
+      react("❌", event);
+      reply(`❗ An error occurred: ${error.message}`, event);
     }
   }
 };
